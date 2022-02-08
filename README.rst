@@ -69,6 +69,12 @@ Project Features
    detect potential takeovers
 -  Slack Webhook support to send notifications of takeovers
 
+**Important:**
+
+In order for this tool to be effective, it must have a complete picture
+of your AWS environment. If it does not have a complete picture, it will
+lead to false positive findings.
+
 Installing Ghostbuster
 ----------------------
 
@@ -175,14 +181,6 @@ Example Output
 
 Setting up your AWS accounts
 ----------------------------
-
-**Important:**
-
-In order for this tool to be effective, it must have a complete picture
-of your AWS environment. If it does not have a complete picture, it will
-lead to false positive findings.
-
---------------
 
 The first step is creating keys or roles in your AWS accounts that grant
 the privileges necessary to read Route53 records and describe elastic

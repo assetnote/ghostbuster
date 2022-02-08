@@ -10,6 +10,7 @@ betwen Route53 records and Elastic IPs / IPs in your AWS account.
 """
 import csv
 import datetime
+import sys
 import requests
 import click
 from .__init__ import Info, pass_info
@@ -149,7 +150,7 @@ def aws(
     """Scan for dangling elastic IPs inside your AWS accounts."""
     # ascii art
     if not skipascii:
-        click.echo(base64.b64decode(logo_b64))
+        sys.stdout.write(base64.b64decode(logo_b64).decode('utf-8'))
     session = boto3.Session()
     profiles = session.available_profiles
     if exclude != "":
