@@ -1,0 +1,3 @@
+name: ghostbuster
+dependencies:
+  - python=3.8
