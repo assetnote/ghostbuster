@@ -29,7 +29,13 @@ When you are deploying infrastructure to AWS, you may spin up EC2 instances whic
 
 There has been a great amount of research done on elastic IP takeovers, where it is possible for attackers to continually claim elastic IPs until they obtain an IP associated with a subdomain of the company they are targeting.
 
-While AWS frequently bans accounts that are attempting to perform this attack pattern, no long term fix has been released by AWS. As a result, AWS customers have been and are still vulnerable to subdomain takeover attacks through dangling elastic IPs.
+While AWS frequently bans accounts that are attempting to perform this attack pattern, no long term fix has been released by AWS.
+
+The impact of dangling elastic IP subdomain takeover attacks are more serious than a typical subdomain takeover where you can only control the content being served. With dangling elastic IP takeovers, it is possible for an attacker to do the following:
+
+* Claim SSL certificates for the subdomain
+* Listen for traffic on all ports (potentially discovering sensitive information still being sent to the subdomain)
+* Run server-side scripts with the ability to steal HTTPOnly cookies, typically leading to a one-click account takeover attack when cookies are scoped to `*.domain.com`
 
 ## Project Features
 
