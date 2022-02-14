@@ -1,4 +1,4 @@
-<img src="screenshots/ghostbusters.png" width="300" height="300">
+<img src="screenshots/ghostbuster.png" width="600" height="300">
 
 # Table of Contents
 - [Table of Contents](#table-of-contents)
