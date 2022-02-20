@@ -198,6 +198,11 @@ def try_record(test, record):
     is_flag=True,
     help="Skip printing the ASCII art when starting up Ghostbuster.",
 )
+@click.option(
+    "--profile",
+    default="",
+    help="Specify a specific AWS profile to run ghostbuster on.",
+)
 @cli.command(help="Scan for dangling elastic IPs inside your AWS accounts.")
 @pass_info
 def aws(
@@ -208,8 +213,9 @@ def aws(
     cloudflaretoken: str,
     records: str,
     slackwebhook: str,
-    skipascii: str
-):
+    skipascii: str,
+    profile: str
+    ):
     """Scan for dangling elastic IPs inside your AWS accounts."""
     # ascii art
     if not skipascii:
@@ -220,6 +226,8 @@ def aws(
         exclude_list = exclude.split(",")
         for excluded_profile in exclude_list:
             profiles.remove(excluded_profile)
+    if profile != "":
+        profiles = [profile]
     dns_records = []
     # collection of records from cloudflare
     if cloudflaretoken != "":

@@ -49,9 +49,19 @@ until they obtain an IP associated with a subdomain of the company they
 are targeting.
 
 While AWS frequently bans accounts that are attempting to perform this
-attack pattern, no long term fix has been released by AWS. As a result,
-AWS customers have been and are still vulnerable to subdomain takeover
-attacks through dangling elastic IPs.
+attack pattern, no long term fix has been released by AWS.
+
+The impact of dangling elastic IP subdomain takeover attacks are more
+serious than a typical subdomain takeover where you can only control the
+content being served. With dangling elastic IP takeovers, it is possible
+for an attacker to do the following:
+
+-  Claim SSL certificates for the subdomain
+-  Listen for traffic on all ports (potentially discovering sensitive
+   information still being sent to the subdomain)
+-  Run server-side scripts with the ability to steal HTTPOnly cookies,
+   typically leading to a one-click account takeover attack when cookies
+   are scoped to ``*.domain.com``
 
 Project Features
 ----------------
@@ -89,12 +99,15 @@ Using Ghostbuster
 
 ::
 
-   ❯ ghostbuster scan aws --help     
+   ❯ ghostbuster scan aws --help                                                                                                                                                                     
    Usage: ghostbuster scan aws [OPTIONS]
 
      Scan for dangling elastic IPs inside your AWS accounts.
 
    Options:
+     --profile TEXT          Specify a specific AWS profile to run ghostbuster
+                             on.
+
      --skipascii             Skip printing the ASCII art when starting up
                              Ghostbuster.
 

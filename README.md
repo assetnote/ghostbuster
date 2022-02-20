@@ -62,12 +62,15 @@ This requires a Python 3.x environment.
 ## Using Ghostbuster
 
 ```
-❯ ghostbuster scan aws --help     
+❯ ghostbuster scan aws --help                                                                                                                                                                     
 Usage: ghostbuster scan aws [OPTIONS]
 
   Scan for dangling elastic IPs inside your AWS accounts.
 
 Options:
+  --profile TEXT          Specify a specific AWS profile to run ghostbuster
+                          on.
+
   --skipascii             Skip printing the ASCII art when starting up
                           Ghostbuster.
 
