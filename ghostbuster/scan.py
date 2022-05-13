@@ -20,6 +20,7 @@ import CloudFlare
 import awsipranges
 from slack_sdk.webhook import WebhookClient
 
+route53_zone_records_set = {}
 
 @click.group(
     help="Commands that help you scan your AWS account for dangling elastic IPs"
@@ -124,11 +125,15 @@ def get_route53_zone_records(route53, zone_id, next_record=None):
     else:
         response = route53.list_resource_record_sets(HostedZoneId=zone_id)
     zone_records = response["ResourceRecordSets"]
+
     # if response is truncated, call function again with next record name/id
     if response["IsTruncated"]:
-        zone_records += get_route53_zone_records(
-            route53, zone_id, (response["NextRecordName"], response["NextRecordType"])
-        )
+        zone_set_record_key = response["NextRecordName"] + "_" + response["NextRecordType"]
+        if zone_set_record_key in route53_zone_records_set == False:
+            zone_records += get_route53_zone_records(
+                route53, zone_id, (response["NextRecordName"], response["NextRecordType"])
+            )
+            route53_zone_records_set.add(zone_set_record_key)
     return zone_records
 
 
