@@ -16,6 +16,7 @@ import click
 from .__init__ import Info, pass_info
 import boto3
 import base64
+import json as json_lib
 import CloudFlare
 import awsipranges
 from slack_sdk.webhook import WebhookClient
@@ -193,6 +194,12 @@ def try_record(test, record):
     help="Specify a Slack webhook URL to send notifications about potential takeovers.",
 )
 @click.option(
+    "--json",
+    default=False,
+    is_flag=True,
+    help="Only return a JSON object.",
+)
+@click.option(
     "--skipascii",
     default=False,
     is_flag=True,
@@ -214,11 +221,12 @@ def aws(
     records: str,
     slackwebhook: str,
     skipascii: str,
-    profile: str
+    profile: str,
+    json: bool
     ):
     """Scan for dangling elastic IPs inside your AWS accounts."""
     # ascii art
-    if not skipascii:
+    if not skipascii and not json:
         sys.stdout.write(base64.b64decode(logo_b64).decode('utf-8'))
     session = boto3.Session()
     profiles = session.available_profiles
@@ -239,9 +247,10 @@ def aws(
     for profile in profiles:
         profile_session = boto3.session.Session(profile_name=profile)
         route53 = profile_session.client("route53")
-        click.echo(
-            "Obtaining Route53 hosted zones for AWS profile: {0}.".format(profile)
-        )
+        if not json:
+            click.echo(
+                "Obtaining Route53 hosted zones for AWS profile: {0}.".format(profile)
+            )
         hosted_zones = get_route53_hosted_zones(route53)
         for zone in hosted_zones:
             zone_records = get_route53_zone_records(route53, zone["Id"])
@@ -258,7 +267,8 @@ def aws(
                         r53_obj = {"name": record["Name"], "records": a_records}
                         dns_records.append(r53_obj)
 
-    click.echo("Obtained {0} DNS A records so far.".format(len(dns_records)))
+    if not json:
+        click.echo("Obtained {0} DNS A records so far.".format(len(dns_records)))
 
     # collection of IPs
     if allregions:
@@ -272,9 +282,10 @@ def aws(
     # collect elastic compute addresses / EIPs for all regions
     for region in aws_regions:
         for profile in profiles:
-            click.echo(
-                "Obtaining EIPs for region: {}, profile: {}".format(region, profile)
-            )
+            if not json:
+                click.echo(
+                    "Obtaining EIPs for region: {}, profile: {}".format(region, profile)
+                )
             profile_session = boto3.session.Session(profile_name=profile)
             client = profile_session.client("ec2", region_name=region)
             # super annoying, boto3 doesn't have a native paginator class for describe_addresses
@@ -291,11 +302,12 @@ def aws(
                 if "NextToken" not in addresses_dict:
                     break
 
-            click.echo(
-                "Obtaining IPs for network interfaces for region: {}, profile: {}".format(
-                    region, profile
+            if not json:
+                click.echo(
+                    "Obtaining IPs for network interfaces for region: {}, profile: {}".format(
+                        region, profile
+                    )
                 )
-            )
             nic_paginator = client.get_paginator("describe_network_interfaces")
             for resp in nic_paginator.paginate():
                 for interface in resp.get("NetworkInterfaces", []):
@@ -304,7 +316,8 @@ def aws(
                         elastic_ips.append(nic_public_ip)
 
     unique_ips = list(set(elastic_ips))
-    click.echo("Obtained {0} unique elastic IPs from AWS.".format(len(unique_ips)))
+    if not json:
+        click.echo("Obtained {0} unique elastic IPs from AWS.".format(len(unique_ips)))
 
     dns_ec2_ips = []
     # find all DNS records that point to EC2 IP addresses
@@ -322,7 +335,8 @@ def aws(
         for record in record_set["records"]:
             if record not in elastic_ips:
                 takeovers.append(record_set)
-                click.echo("Takeover possible: {}".format(record_set))
+                if not json:
+                    click.echo("Takeover possible: {}".format(record_set))
 
     # check if manually specified A records exist in AWS acc (eips/public ips)
     if records:
@@ -339,11 +353,13 @@ def aws(
                                     "records": [row["record"]],
                                 }
                                 takeovers.append(takeover_obj)
-                                click.echo("Takeover possible: {}".format(takeover_obj))
+                                if not json:
+                                    click.echo("Takeover possible: {}".format(takeover_obj))
+    if len(takeovers) == 0 and not json:
+        click.echo("No takeovers detected! Nice work.")
+    elif json:
+        click.echo(json_lib.dumps(takeovers, indent=2))
 
     # send slack webhooks, with retries incase of 429s
     if slackwebhook != "":
         send_webhook(slackwebhook, takeovers)
-
-    if len(takeovers) == 0:
-        click.echo("No takeovers detected! Nice work.")

@@ -111,6 +111,7 @@ Using Ghostbuster
      --skipascii             Skip printing the ASCII art when starting up
                              Ghostbuster.
 
+     --json                  Only return a JSON object.
      --slackwebhook TEXT     Specify a Slack webhook URL to send notifications
                              about potential takeovers.
 
