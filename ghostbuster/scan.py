@@ -203,6 +203,11 @@ def try_record(test, record):
     default="",
     help="Specify a specific AWS profile to run ghostbuster on.",
 )
+@click.option(
+    "--roles",
+    default="",
+    help="Specify AWS roles to assume and run ghostbuster on. ",
+)
 @cli.command(help="Scan for dangling elastic IPs inside your AWS accounts.")
 @pass_info
 def aws(
@@ -341,7 +346,7 @@ def aws(
                                 takeovers.append(takeover_obj)
                                 click.echo("Takeover possible: {}".format(takeover_obj))
 
-    # send slack webhooks, with retries incase of 429s
+    # send slack webhooks, with retries in case of 429s
     if slackwebhook != "":
         send_webhook(slackwebhook, takeovers)
 
