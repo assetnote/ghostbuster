@@ -112,7 +112,6 @@ def get_route53_hosted_zones(route53, next_zone=None):
         )
     return hosted_zones
 
-
 def get_route53_zone_records(route53, zone_id, next_record=None):
     """Recursively returns a list of records of a hosted zone in Route 53."""
     if next_record:
@@ -130,7 +129,6 @@ def get_route53_zone_records(route53, zone_id, next_record=None):
             route53, zone_id, (response["NextRecordName"], response["NextRecordType"])
         )
     return zone_records
-
 
 def get_record_value(record):
     """Return a list of values for a hosted zone record."""
@@ -151,7 +149,6 @@ def get_record_value(record):
             value.append(v["Value"])
     return value
 
-
 def try_record(test, record):
     """Return a value for a record"""
     # test for Key and Type errors
@@ -163,6 +160,37 @@ def try_record(test, record):
         value = ""
     return value
 
+def get_route53_A_records(route53):
+    dns_records = []
+    hosted_zones = get_route53_hosted_zones(route53)
+    for zone in hosted_zones:
+        zone_records = get_route53_zone_records(route53, zone["Id"])
+        for record in zone_records:
+            if record["Type"] == "A":
+                # we aren't interested in alias records
+                if record.get("AliasTarget"):
+                    # skip
+                    pass
+                else:
+                    a_records = []
+                    for r53value in record["ResourceRecords"]:
+                        a_records.append(r53value["Value"])
+                    r53_obj = {"name": record["Name"], "records": a_records}
+                    dns_records.append(r53_obj)
+    return dns_records
+
+def assume_role(role_arn):
+    assumed_role_object = session.client('sts').assume_role(
+        RoleArn=role_arn,
+        RoleSessionName=f'ghostbuster-session'
+    )
+    assumed_role_credentials = assumed_role_object['Credentials']
+
+    return boto3.Session(
+        aws_access_key_id=assumed_role_credentials['AccessKeyId'],
+        aws_secret_access_key=assumed_role_credentials['SecretAccessKey'],
+        aws_session_token=assumed_role_credentials['SessionToken']
+    )
 
 @click.option(
     "--regions", default="us-east-1", help="Comma delimited list of regions to run on."
@@ -205,8 +233,10 @@ def try_record(test, record):
 )
 @click.option(
     "--roles",
-    default="",
-    help="Specify AWS roles to assume and run ghostbuster on. ",
+    required=False,
+    type=click.Path(exists=True),
+    help="Specify CSV filename with AWS account IDs to run ghostbuster on. Each account must have ghostbuster role "
+         "assumable by ghostbuster instance/lambda/whatever is running ghostbuster",
 )
 @cli.command(help="Scan for dangling elastic IPs inside your AWS accounts.")
 @pass_info
@@ -219,7 +249,8 @@ def aws(
     records: str,
     slackwebhook: str,
     skipascii: str,
-    profile: str
+    profile: str,
+    roles: str
     ):
     """Scan for dangling elastic IPs inside your AWS accounts."""
     # ascii art
@@ -227,12 +258,14 @@ def aws(
         sys.stdout.write(base64.b64decode(logo_b64).decode('utf-8'))
     session = boto3.Session()
     profiles = session.available_profiles
+
     if exclude != "":
         exclude_list = exclude.split(",")
         for excluded_profile in exclude_list:
             profiles.remove(excluded_profile)
     if profile != "":
         profiles = [profile]
+
     dns_records = []
     # collection of records from cloudflare
     if cloudflaretoken != "":
@@ -240,28 +273,29 @@ def aws(
         dns_records = dns_records + cf_dns_records
         click.echo("Obtained {0} DNS A records so far.".format(len(dns_records)))
 
-    # collection of records from r53
+    # collection of records from r53 using profiles
     for profile in profiles:
         profile_session = boto3.session.Session(profile_name=profile)
         route53 = profile_session.client("route53")
+
         click.echo(
             "Obtaining Route53 hosted zones for AWS profile: {0}.".format(profile)
         )
-        hosted_zones = get_route53_hosted_zones(route53)
-        for zone in hosted_zones:
-            zone_records = get_route53_zone_records(route53, zone["Id"])
-            for record in zone_records:
-                if record["Type"] == "A":
-                    # we aren't interested in alias records
-                    if record.get("AliasTarget"):
-                        # skip
-                        pass
-                    else:
-                        a_records = []
-                        for r53value in record["ResourceRecords"]:
-                            a_records.append(r53value["Value"])
-                        r53_obj = {"name": record["Name"], "records": a_records}
-                        dns_records.append(r53_obj)
+        dns_records.extend(get_route53_A_records(route53))
+
+    # collection of records from r53 using roles
+    if roles:
+        with open(roles, "r") as fp:
+            csv_reader = csv.DictReader(fp)
+            for account_id in csv_reader:
+                role_arn = f"arn:aws:iam::{account_id}:role/ghostbuster"
+                role_session = assume_role(role_arn)
+                route53 = role_session.client('route53')
+
+                click.echo(
+                    "Obtaining Route53 hosted zones for AWS accound ID: {0}.".format(account_id)
+                )
+                dns_records.extend(get_route53_A_records(route53))
 
     click.echo("Obtained {0} DNS A records so far.".format(len(dns_records)))
 
