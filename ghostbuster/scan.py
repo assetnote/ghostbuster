@@ -296,7 +296,7 @@ def aws(
     if profile != "":
         profiles = [profile]
     if roles != "":
-        roles = [account_id for account_id in csv.DictReader(open(roles, "r"))]
+        roles = [account_id["account_id"] for account_id in csv.DictReader(open(roles, "r"))]
 
     dns_records = []
     # collection of records from cloudflare
