@@ -209,7 +209,9 @@ def get_eips(ec2):
     return elastic_ips
 
 def assume_role(role_arn):
-    assumed_role_object = session.client('sts').assume_role(
+    session = boto3.Session()
+    sts = session.client('sts')
+    assumed_role_object = sts.assume_role(
         RoleArn=role_arn,
         RoleSessionName=f'ghostbuster-session'
     )
