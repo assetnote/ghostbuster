@@ -179,6 +179,35 @@ def get_route53_A_records(route53):
                     dns_records.append(r53_obj)
     return dns_records
 
+def get_eips(ec2):
+    # super annoying, boto3 doesn't have a native paginator class for describe_addresses
+    elastic_ips = []
+    while True:
+        addresses_dict = []
+        if addresses_dict and "NextToken" in addresses_dict:
+            addresses_dict = client.describe_addresses(
+                NextToken=addresses_dict["NextToken"]
+            )
+        else:
+            addresses_dict = ec2.describe_addresses()
+        for eip_dict in addresses_dict["Addresses"]:
+            elastic_ips.append(eip_dict["PublicIp"])
+        if "NextToken" not in addresses_dict:
+            break
+
+    click.echo(
+        "Obtaining IPs for network interfaces for region: {}, profile: {}".format(
+            region, profile
+        )
+    )
+    nic_paginator = ec22.get_paginator("describe_network_interfaces")
+    for resp in nic_paginator.paginate():
+        for interface in resp.get("NetworkInterfaces", []):
+            if interface.get("Association"):
+                nic_public_ip = interface["Association"]["PublicIp"]
+                elastic_ips.append(nic_public_ip)
+    return elastic_ips
+
 def assume_role(role_arn):
     assumed_role_object = session.client('sts').assume_role(
         RoleArn=role_arn,
@@ -233,6 +262,7 @@ def assume_role(role_arn):
 )
 @click.option(
     "--roles",
+    default="",
     required=False,
     type=click.Path(exists=True),
     help="Specify CSV filename with AWS account IDs to run ghostbuster on. Each account must have ghostbuster role "
@@ -265,6 +295,8 @@ def aws(
             profiles.remove(excluded_profile)
     if profile != "":
         profiles = [profile]
+    if roles != "":
+        roles = [account_id for account_id in csv.DictReader(open(roles, "r"))]
 
     dns_records = []
     # collection of records from cloudflare
@@ -277,25 +309,21 @@ def aws(
     for profile in profiles:
         profile_session = boto3.session.Session(profile_name=profile)
         route53 = profile_session.client("route53")
-
         click.echo(
             "Obtaining Route53 hosted zones for AWS profile: {0}.".format(profile)
         )
         dns_records.extend(get_route53_A_records(route53))
 
     # collection of records from r53 using roles
-    if roles:
-        with open(roles, "r") as fp:
-            csv_reader = csv.DictReader(fp)
-            for account_id in csv_reader:
-                role_arn = f"arn:aws:iam::{account_id}:role/ghostbuster"
-                role_session = assume_role(role_arn)
-                route53 = role_session.client('route53')
-
-                click.echo(
-                    "Obtaining Route53 hosted zones for AWS accound ID: {0}.".format(account_id)
-                )
-                dns_records.extend(get_route53_A_records(route53))
+    for account_id in roles:
+        print("Checking account {0}".format(account_id))
+        role_arn = "arn:aws:iam::{0}:role/GhostbusterTargetAccountRole".format(account_id)
+        role_session = assume_role(role_arn)
+        route53 = role_session.client('route53')
+        click.echo(
+            "Obtaining Route53 hosted zones for AWS account ID: {0}.".format(account_id)
+        )
+        dns_records.extend(get_route53_A_records(route53))
 
     click.echo("Obtained {0} DNS A records so far.".format(len(dns_records)))
 
@@ -307,6 +335,7 @@ def aws(
         ]
     else:
         aws_regions = regions.split(",")
+
     elastic_ips = []
     # collect elastic compute addresses / EIPs for all regions
     for region in aws_regions:
@@ -315,32 +344,16 @@ def aws(
                 "Obtaining EIPs for region: {}, profile: {}".format(region, profile)
             )
             profile_session = boto3.session.Session(profile_name=profile)
-            client = profile_session.client("ec2", region_name=region)
-            # super annoying, boto3 doesn't have a native paginator class for describe_addresses
-            while True:
-                addresses_dict = []
-                if addresses_dict and "NextToken" in addresses_dict:
-                    addresses_dict = client.describe_addresses(
-                        NextToken=addresses_dict["NextToken"]
-                    )
-                else:
-                    addresses_dict = client.describe_addresses()
-                for eip_dict in addresses_dict["Addresses"]:
-                    elastic_ips.append(eip_dict["PublicIp"])
-                if "NextToken" not in addresses_dict:
-                    break
-
+            ec2 = profile_session.client("ec2", region_name=region)
+            elastic_ips.extend(get_eips(ec2))
+        for account_id in roles:
             click.echo(
-                "Obtaining IPs for network interfaces for region: {}, profile: {}".format(
-                    region, profile
-                )
+                "Obtaining EIPs for region: {}, account ID: {}".format(region, account_id)
             )
-            nic_paginator = client.get_paginator("describe_network_interfaces")
-            for resp in nic_paginator.paginate():
-                for interface in resp.get("NetworkInterfaces", []):
-                    if interface.get("Association"):
-                        nic_public_ip = interface["Association"]["PublicIp"]
-                        elastic_ips.append(nic_public_ip)
+            role_arn = "arn:aws:iam::{0}:role/GhostbusterTargetAccountRole".format(account_id)
+            role_session = assume_role(role_arn)
+            ec2 = role_session.client('ec2', region_name=region)
+            elastic_ips.extend(get_eips(ec2))
 
     unique_ips = list(set(elastic_ips))
     click.echo("Obtained {0} unique elastic IPs from AWS.".format(len(unique_ips)))
@@ -355,6 +368,7 @@ def aws(
                 for service in aws_metadata.services:
                     if service == "EC2":
                         dns_ec2_ips.append(record_set)
+
     takeovers = []
     # check to see if any of the record sets we have, we don't own the elastic IPs
     for record_set in dns_ec2_ips:
