@@ -179,7 +179,7 @@ def get_route53_A_records(route53):
                     dns_records.append(r53_obj)
     return dns_records
 
-def get_eips(ec2):
+def get_eips(ec2, region):
     # super annoying, boto3 doesn't have a native paginator class for describe_addresses
     elastic_ips = []
     while True:
@@ -196,11 +196,9 @@ def get_eips(ec2):
             break
 
     click.echo(
-        "Obtaining IPs for network interfaces for region: {}, profile: {}".format(
-            region, profile
-        )
+        "Obtaining IPs for network interfaces for region: {}".format(region)
     )
-    nic_paginator = ec22.get_paginator("describe_network_interfaces")
+    nic_paginator = ec2.get_paginator("describe_network_interfaces")
     for resp in nic_paginator.paginate():
         for interface in resp.get("NetworkInterfaces", []):
             if interface.get("Association"):
@@ -347,15 +345,15 @@ def aws(
             )
             profile_session = boto3.session.Session(profile_name=profile)
             ec2 = profile_session.client("ec2", region_name=region)
-            elastic_ips.extend(get_eips(ec2))
+            elastic_ips.extend(get_eips(ec2=ec2, region=region))
         for account_id in roles:
             click.echo(
                 "Obtaining EIPs for region: {}, account ID: {}".format(region, account_id)
             )
             role_arn = "arn:aws:iam::{0}:role/GhostbusterTargetAccountRole".format(account_id)
             role_session = assume_role(role_arn)
-            ec2 = role_session.client('ec2', region_name=region)
-            elastic_ips.extend(get_eips(ec2))
+            ec2 = role_session.client("ec2", region_name=region)
+            elastic_ips.extend(get_eips(ec2=ec2, region=region))
 
     unique_ips = list(set(elastic_ips))
     click.echo("Obtained {0} unique elastic IPs from AWS.".format(len(unique_ips)))
