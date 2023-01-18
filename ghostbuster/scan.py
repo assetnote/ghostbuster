@@ -208,18 +208,31 @@ def get_eips(ec2, region):
 
 def assume_role(role_arn):
     session = boto3.Session()
-    sts = session.client('sts')
+    sts = session.client("sts")
     assumed_role_object = sts.assume_role(
         RoleArn=role_arn,
-        RoleSessionName=f'ghostbuster-session'
+        RoleSessionName="ghostbuster-session"
     )
-    assumed_role_credentials = assumed_role_object['Credentials']
+    assumed_role_credentials = assumed_role_object["Credentials"]
 
     return boto3.Session(
-        aws_access_key_id=assumed_role_credentials['AccessKeyId'],
-        aws_secret_access_key=assumed_role_credentials['SecretAccessKey'],
-        aws_session_token=assumed_role_credentials['SessionToken']
+        aws_access_key_id=assumed_role_credentials["AccessKeyId"],
+        aws_secret_access_key=assumed_role_credentials["SecretAccessKey"],
+        aws_session_token=assumed_role_credentials["SessionToken"]
     )
+
+def get_all_accounts(organisation_lookup_role_arn):
+    accounts = []
+    session = assume_role(organisation_lookup_role_arn)
+    organizations = session.client("organizations")
+
+    response = organizations.list_accounts()
+    accounts += response["Accounts"]
+    while "NextToken" in response:
+        response = organizations.list_accounts(NextToken=response["NextToken"])
+        accounts += response["Accounts"]
+        print(response["Accounts"])
+    return accounts
 
 @click.option(
     "--regions", default="us-east-1", help="Comma delimited list of regions to run on."
@@ -266,7 +279,15 @@ def assume_role(role_arn):
     required=False,
     type=click.Path(exists=True),
     help="Specify CSV filename with AWS account IDs to run ghostbuster on. Each account must have ghostbuster role "
-         "assumable by ghostbuster instance/lambda/whatever is running ghostbuster",
+         "assumable by ghostbuster ec2/lambda/whatever is running ghostbuster. Role name: GhostbusterTargetAccountRole",
+)
+@click.option(
+    "--autoroles",
+    default="",
+    required=False,
+    help="Like --roles, but finds all organisation accounts automatically. The argument value should be ARN of a role "
+         "with organizations:ListAccounts and organizations:DescribeAccount. Ec2/lambda/whatever is running ghostbuster"
+         " must have permissions to assume the organisation lookup role."
 )
 @cli.command(help="Scan for dangling elastic IPs inside your AWS accounts.")
 @pass_info
@@ -280,7 +301,8 @@ def aws(
     slackwebhook: str,
     skipascii: str,
     profile: str,
-    roles: str
+    roles: str,
+    autoroles: str
     ):
     """Scan for dangling elastic IPs inside your AWS accounts."""
     # ascii art
@@ -295,8 +317,14 @@ def aws(
             profiles.remove(excluded_profile)
     if profile != "":
         profiles = [profile]
+
+    account_ids = []
     if roles != "":
-        roles = [account_id["account_id"] for account_id in csv.DictReader(open(roles, "r"))]
+        account_ids = [account_id["account_id"] for account_id in csv.DictReader(open(roles, "r"))]
+    if autoroles:
+        click.echo("Finding accounts automatically using role: {0}".format(autoroles))
+        account_ids = get_all_accounts(autoroles)
+        click.echo("Found {0} accounts in the organisation.".format(len(account_ids)))
 
     dns_records = []
     # collection of records from cloudflare
@@ -315,7 +343,7 @@ def aws(
         dns_records.extend(get_route53_A_records(route53))
 
     # collection of records from r53 using roles
-    for account_id in roles:
+    for account_id in account_ids:
         print("Checking account {0}".format(account_id))
         role_arn = "arn:aws:iam::{0}:role/GhostbusterTargetAccountRole".format(account_id)
         role_session = assume_role(role_arn)
@@ -346,7 +374,7 @@ def aws(
             profile_session = boto3.session.Session(profile_name=profile)
             ec2 = profile_session.client("ec2", region_name=region)
             elastic_ips.extend(get_eips(ec2=ec2, region=region))
-        for account_id in roles:
+        for account_id in account_ids:
             click.echo(
                 "Obtaining EIPs for region: {}, account ID: {}".format(region, account_id)
             )
