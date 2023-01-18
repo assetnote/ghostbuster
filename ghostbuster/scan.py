@@ -255,7 +255,8 @@ def get_all_accounts(organisation_lookup_role_arn):
     "--records",
     required=False,
     type=click.Path(exists=True),
-    help="Manually specify DNS records to check against. Ghostbuster will check these IPs after checking retrieved DNS records. See records.csv for an example.",
+    help="Manually specify DNS records to check against. Ghostbuster will check these IPs after checking retrieved DNS "
+         "records. See records.csv for an example.",
 )
 @click.option(
     "--slackwebhook",
@@ -275,11 +276,11 @@ def get_all_accounts(organisation_lookup_role_arn):
 )
 @click.option(
     "--roles",
-    default="",
     required=False,
     type=click.Path(exists=True),
     help="Specify CSV filename with AWS account IDs to run ghostbuster on. Each account must have ghostbuster role "
-         "assumable by ghostbuster ec2/lambda/whatever is running ghostbuster. Role name: GhostbusterTargetAccountRole",
+         "assumable by ghostbuster ec2/lambda/whatever is running ghostbuster. Role name: GhostbusterTargetAccountRole."
+         " See roles.csv for example.",
 )
 @click.option(
     "--autoroles",
@@ -319,9 +320,9 @@ def aws(
         profiles = [profile]
 
     account_ids = []
-    if roles != "":
+    if roles:
         account_ids = [account_id["account_id"] for account_id in csv.DictReader(open(roles, "r"))]
-    if autoroles:
+    elif autoroles:
         click.echo("Finding accounts automatically using role: {0}".format(autoroles))
         account_ids = get_all_accounts(autoroles)
         click.echo("Found {0} accounts in the organisation.".format(len(account_ids)))
