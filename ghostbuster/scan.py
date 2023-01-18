@@ -221,18 +221,21 @@ def assume_role(role_arn):
         aws_session_token=assumed_role_credentials["SessionToken"]
     )
 
-def get_all_accounts(organisation_lookup_role_arn):
-    accounts = []
+def get_all_account_ids(organisation_lookup_role_arn):
+    account_ids = []
     session = assume_role(organisation_lookup_role_arn)
     organizations = session.client("organizations")
 
+    def add_account_ids(list_accounts_response):
+        for account in list_accounts_response["Accounts"]:
+            account_ids.append(account["Id"])
+
     response = organizations.list_accounts()
-    accounts += response["Accounts"]
+    add_account_ids(response)
     while "NextToken" in response:
         response = organizations.list_accounts(NextToken=response["NextToken"])
-        accounts += response["Accounts"]
-        print(response["Accounts"])
-    return accounts
+        add_account_ids(response)
+    return account_ids
 
 @click.option(
     "--regions", default="us-east-1", help="Comma delimited list of regions to run on."
@@ -324,7 +327,7 @@ def aws(
         account_ids = [account_id["account_id"] for account_id in csv.DictReader(open(roles, "r"))]
     elif autoroles:
         click.echo("Finding accounts automatically using role: {0}".format(autoroles))
-        account_ids = get_all_accounts(autoroles)
+        account_ids = get_all_account_ids(autoroles)
         click.echo("Found {0} accounts in the organisation.".format(len(account_ids)))
 
     dns_records = []
