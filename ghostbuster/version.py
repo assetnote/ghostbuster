@@ -8,5 +8,5 @@ This module contains project version information.
 .. moduleauthor:: shubham_shah <sshah@assetnote.io>
 """
 
-__version__ = "0.0.7"  #: the working version
-__release__ = "0.0.7"  #: the release version
+__version__ = "1.0.0"  #: the working version
+__release__ = "1.0.0"  #: the release version
