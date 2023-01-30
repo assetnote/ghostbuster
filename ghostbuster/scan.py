@@ -20,6 +20,7 @@ import json as json_lib
 import CloudFlare
 import awsipranges
 from slack_sdk.webhook import WebhookClient
+from botocore.exceptions import ClientError
 
 route53_zone_records_set = {}
 
@@ -37,6 +38,10 @@ logo_b64 = "G1swbSAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
 json_output = False
 
 
+def log(text):
+    if not json_output:
+        click.echo(text)
+
 def send_webhook(slackwebhook, takeovers):
     webhook = WebhookClient(url=slackwebhook)
     from slack_sdk.http_retry.builtin_handlers import RateLimitErrorRetryHandler
@@ -50,8 +55,7 @@ def send_webhook(slackwebhook, takeovers):
         _ = webhook.send(text=payload)
 
 def get_cloudflare_records(cloudflaretoken):
-    if not json_output:
-        click.echo("Obtaining all zone names from Cloudflare.")
+    log("Obtaining all zone names from Cloudflare.")
     cf = CloudFlare.CloudFlare(token=cloudflaretoken, raw=True)
     dns_records = []
     # get zone names
@@ -74,8 +78,7 @@ def get_cloudflare_records(cloudflaretoken):
     except CloudFlare.exceptions.CloudFlareAPIError as e:
         exit("Failed to retreive zones %d %s - api call failed" % (e, e))
 
-    if not json_output:
-        click.echo("Obtaining DNS A records for all zones from Cloudflare.")
+    log("Obtaining DNS A records for all zones from Cloudflare.")
     # get dns records for zones
     for zone in cloudflare_zones:
         try:
@@ -205,8 +208,7 @@ def get_eips(ec2, region):
         if "NextToken" not in addresses_dict:
             break
 
-    if not json_output:
-        click.echo("Obtaining IPs for network interfaces for region: {}".format(region))
+    log("Obtaining IPs for network interfaces for region: {}".format(region))
     nic_paginator = ec2.get_paginator("describe_network_interfaces")
     for resp in nic_paginator.paginate():
         for interface in resp.get("NetworkInterfaces", []):
@@ -346,40 +348,39 @@ def aws(
     if roles:
         account_ids = [account_id["account_id"] for account_id in csv.DictReader(open(roles, "r"))]
     elif autoroles:
-        if not json:
-            click.echo("Finding accounts automatically using role: {0}".format(autoroles))
+        log("Finding accounts automatically using role: {0}".format(autoroles))
         account_ids = get_all_account_ids(autoroles)
-        if not json:
-            click.echo("Found {0} accounts in the organisation.".format(len(account_ids)))
+        log("Found {0} accounts in the organisation.".format(len(account_ids)))
 
     dns_records = []
     # collection of records from cloudflare
     if cloudflaretoken != "":
         cf_dns_records = get_cloudflare_records(cloudflaretoken)
         dns_records = dns_records + cf_dns_records
-        if not json:
-            click.echo("Obtained {0} DNS A records so far.".format(len(dns_records)))
+        log("Obtained {0} DNS A records so far.".format(len(dns_records)))
 
     # collection of records from r53 using profiles
     for profile in profiles:
         profile_session = boto3.session.Session(profile_name=profile)
         route53 = profile_session.client("route53")
-        if not json:
-            click.echo("Obtaining Route53 hosted zones for AWS profile: {0}.".format(profile))
+        log("Obtaining Route53 hosted zones for AWS profile: {0}.".format(profile))
         dns_records.extend(get_route53_A_records(route53))
 
     # collection of records from r53 using roles
     for account_id in account_ids:
         print("Checking account {0}".format(account_id))
         role_arn = "arn:aws:iam::{0}:role/GhostbusterTargetAccountRole".format(account_id)
-        role_session = assume_role(role_arn)
+        try:
+            role_session = assume_role(role_arn)
+            log("Successfully assumed role from account {0}".format(account_id))
+        except ClientError as error:
+            log("Failed to assume role {0}, skipping it. Error: {1}".format(role_arn, error))
+            continue
         route53 = role_session.client('route53')
-        if not json:
-            click.echo("Obtaining Route53 hosted zones for AWS account ID: {0}.".format(account_id))
+        log("Obtaining Route53 hosted zones for AWS account ID: {0}.".format(account_id))
         dns_records.extend(get_route53_A_records(route53))
 
-    if not json:
-        click.echo("Obtained {0} DNS A records so far.".format(len(dns_records)))
+    log("Obtained {0} DNS A records so far.".format(len(dns_records)))
 
     # collection of IPs
     if allregions:
@@ -394,22 +395,24 @@ def aws(
     # collect elastic compute addresses / EIPs for all regions
     for region in aws_regions:
         for profile in profiles:
-            if not json:
-                click.echo("Obtaining EIPs for region: {}, profile: {}".format(region, profile))
+            log("Obtaining EIPs for region: {}, profile: {}".format(region, profile))
             profile_session = boto3.session.Session(profile_name=profile)
             ec2 = profile_session.client("ec2", region_name=region)
             elastic_ips.extend(get_eips(ec2=ec2, region=region))
         for account_id in account_ids:
-            if not json:
-                click.echo("Obtaining EIPs for region: {}, account ID: {}".format(region, account_id))
+            log("Obtaining EIPs for region: {}, account ID: {}".format(region, account_id))
             role_arn = "arn:aws:iam::{0}:role/GhostbusterTargetAccountRole".format(account_id)
-            role_session = assume_role(role_arn)
+            try:
+                role_session = assume_role(role_arn)
+            except ClientError as error:
+                log("Failed to assume role {0}, skipping it. Error: {1}".format(role_arn, error))
+                continue
+
             ec2 = role_session.client("ec2", region_name=region)
             elastic_ips.extend(get_eips(ec2=ec2, region=region))
 
     unique_ips = list(set(elastic_ips))
-    if not json:
-        click.echo("Obtained {0} unique elastic IPs from AWS.".format(len(unique_ips)))
+    log("Obtained {0} unique elastic IPs from AWS.".format(len(unique_ips)))
 
     dns_ec2_ips = []
     # find all DNS records that point to EC2 IP addresses
@@ -428,8 +431,7 @@ def aws(
         for record in record_set["records"]:
             if record not in elastic_ips:
                 takeovers.append(record_set)
-                if not json:
-                    click.echo("Takeover possible: {}".format(record_set))
+                log("Takeover possible: {}".format(record_set))
 
     # check if manually specified A records exist in AWS acc (eips/public ips)
     if records:
@@ -446,11 +448,11 @@ def aws(
                                     "records": [row["record"]],
                                 }
                                 takeovers.append(takeover_obj)
-                                if not json:
-                                    click.echo("Takeover possible: {}".format(takeover_obj))
-    if len(takeovers) == 0 and not json:
-        click.echo("No takeovers detected! Nice work.")
-    elif json:
+                                log("Takeover possible: {}".format(takeover_obj))
+
+    if len(takeovers) == 0:
+        log("No takeovers detected! Nice work.")
+    if json:
         click.echo(json_lib.dumps(takeovers, indent=2))
 
     # send slack webhooks, with retries in case of 429s
