@@ -368,7 +368,6 @@ def aws(
 
     # collection of records from r53 using roles
     for account_id in account_ids:
-        print("Checking account {0}".format(account_id))
         role_arn = "arn:aws:iam::{0}:role/GhostbusterTargetAccountRole".format(account_id)
         try:
             role_session = assume_role(role_arn)
