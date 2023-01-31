@@ -275,7 +275,8 @@ def get_all_account_ids(organisation_lookup_role_arn):
 @click.option(
     "--slackwebhook",
     default="",
-    help="Specify a Slack webhook URL to send notifications about potential takeovers.",
+    help="Specify a Slack webhook URL to send notifications about potential takeovers. Slack workflow variable must be"
+         "named 'text'",
 )
 @click.option(
     "--json",
