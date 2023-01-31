@@ -105,6 +105,7 @@ Run Ghostbuster with a manually input list of subdomain A records (see `records.
 ```
 ❯ ghostbuster scan aws --records records.csv
 ```
+You can specify specific regions using `--regions` set to a comma delimited list of regions i.e. `us-east-1,us-west-1`.
 
 ## Example Output
 
