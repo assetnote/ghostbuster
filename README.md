@@ -280,8 +280,6 @@ resource "aws_iam_policy" "ghostbuster_target_account_roles" {
 }
 ```
 
-Target account al
-
 ## Setting up your AWS permissions for --autoroles
 
 Automatic account discovery requires additional permission compared to --roles. After setting up --roles to work, consider adding following IAM policy in an account that has organisation overview:
