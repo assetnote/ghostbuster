@@ -208,7 +208,7 @@ addresses and EC2 network interfaces.
    ``Create policy``.
 4. Click ``JSON`` and then paste in the following policy:
 
-::
+.. code:: terraform
 
    {
        "Version": "2012-10-17",
@@ -285,6 +285,105 @@ assocaited keys with scoped access.
 Once your AWS configuration has been set with all the accounts in your
 AWS environment, you can then run the tool using the following command:
 
+Setting up your AWS permissions for –roles
+------------------------------------------
+
+Ghostbuster can use roles instead of profiles which removes the need of
+having so many credentials at one place. However, roles approach will
+require creating additional IAM policies within you organisation.
+
+Roles can be used via ``--roles roles.csv`` or ``--autoroles`` flags. To
+setup ``--roles`` to work, one needs to create
+GhostbusterTargetAccountRole role **named exactly like that** in every
+account that is being scanned:
+
+.. code:: terraform
+
+   {
+       "Version": "2012-10-17",
+       "Statement": [
+           {
+               "Sid": "GhostbusterTargetAccountRole",
+               "Effect": "Allow",
+               "Action": [
+                   "ec2:DescribeAddresses",
+                   "ec2:DescribeNetworkInterfaces",
+                   "route53:ListResourceRecordSets",
+                   "route53:ListHostedZonesByName",
+                   "route53:GetTrafficPolicyInstance",
+                   "route53:GetTrafficPolicy"
+               ],
+               "Resource": "*"
+           }
+       ]
+   }
+
+The ghostbuster will be running in lambda/ec2/whatever with
+``ghostbuster`` role - let’s call it ghostbuster master role. The master
+role must be able to assume TargetAccountRoles.
+
+.. code:: terraform
+
+   resource "aws_iam_policy" "ghostbuster_target_account_roles" {
+     name        = "ghostbuster_target_account_roles"
+     path        = "/"
+     description = "Allow inspecting DNS and elastic IP data."
+
+     policy = jsonencode({
+       "Version" : "2012-10-17",
+       "Statement" : [
+         {
+           "Effect" : "Allow",
+           "Action" : "sts:AssumeRole",
+           "Resource" : ["arn:aws:iam::*:role/GhostbusterTargetAccountRole"]
+       }]
+     })
+
+     tags = {
+       Project = "ghostbuster"
+     }
+   }
+
+Setting up your AWS permissions for –autoroles
+----------------------------------------------
+
+Automatic account discovery requires additional permission compared to
+–roles. After setting up –roles to work, consider adding following IAM
+policy in an account that has organisation overview:
+
+.. code:: terraform
+
+   {
+       sid = "BaseAccess"
+
+       actions = [
+         "organizations:DescribeAccount",
+         "organizations:ListAccounts"
+       ]
+
+       resources = ["*"]
+       effect    = "Allow"
+     }
+   }
+
+Then, in the account that is running ghostbuster, attach following
+policy to ghostbuster master role so it can assume the organisation
+lookup role:
+
+.. code:: terraform
+
+   {
+       "Version" : "2012-10-17",
+       "Statement" : [
+         {
+           "Effect" : "Allow",
+           "Action" : "sts:AssumeRole",
+           "Resource" : ["arn:aws:iam::ORG_LOOKUP_ACCOUNT_ID:role/ta-application-security-prd-ghostbuster-org-role"]
+       }]
+   }
+
+Don’t forget to replace ORG_LOOKUP_ACCOUNT_ID with actual account ID.
+
 Setting up Cloudflare (Optional)
 --------------------------------
 
@@ -315,3 +414,14 @@ License
 -------
 
 GNU Affero General Public License
+
+Testing Ghostbusters
+--------------------
+
+1. Clone this repo.
+2. Install virtualenv using ``pip3 install virtualenv``
+3. Create a virtual environment using ``virtualenv venv``
+4. Activate virtual environment using ``. venv/bin/activate``
+5. Install ghostbuster by going to root of repo.
+   ``pip3 install --editable .``
+6. Make your changes and run the ghostbuster command.
