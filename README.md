@@ -246,6 +246,7 @@ Roles can be used via `--roles roles.csv` or `--autoroles` flags. To setup `--ro
             "Action": [
                 "ec2:DescribeAddresses",
                 "ec2:DescribeNetworkInterfaces",
+                "ec2:DescribeRegions",
                 "route53:ListResourceRecordSets",
                 "route53:ListHostedZonesByName",
                 "route53:GetTrafficPolicyInstance",
@@ -309,7 +310,7 @@ Then, in the account that is running ghostbuster, attach following policy to gho
       {
         "Effect" : "Allow",
         "Action" : "sts:AssumeRole",
-        "Resource" : ["arn:aws:iam::ORG_LOOKUP_ACCOUNT_ID:role/ta-application-security-prd-ghostbuster-org-role"]
+        "Resource" : ["arn:aws:iam::ORG_LOOKUP_ACCOUNT_ID:role/ghostbuster-org-role"]
     }]
 }
 ```
