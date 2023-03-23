@@ -382,25 +382,9 @@ def aws(
 
     log("Obtained {0} DNS A records so far.".format(len(dns_records)))
 
-    # collection of IPs
-    if allregions:
-        ec2 = boto3.client("ec2")
-        aws_regions = [
-            region["RegionName"] for region in ec2.describe_regions()["Regions"]
-        ]
-    else:
-        aws_regions = regions.split(",")
-
     elastic_ips = []
-    # collect elastic compute addresses / EIPs for all regions
-    for region in aws_regions:
-        for profile in profiles:
-            log("Obtaining EIPs for region: {}, profile: {}".format(region, profile))
-            profile_session = boto3.session.Session(profile_name=profile)
-            ec2 = profile_session.client("ec2", region_name=region)
-            elastic_ips.extend(get_eips(ec2=ec2, region=region))
+    if roles or autoroles:  # collection of EIPs using roles
         for account_id in account_ids:
-            log("Obtaining EIPs for region: {}, account ID: {}".format(region, account_id))
             role_arn = "arn:aws:iam::{0}:role/GhostbusterTargetAccountRole".format(account_id)
             try:
                 role_session = assume_role(role_arn)
@@ -408,8 +392,26 @@ def aws(
                 log("Failed to assume role {0}, skipping it. Error: {1}".format(role_arn, error))
                 continue
 
-            ec2 = role_session.client("ec2", region_name=region)
-            elastic_ips.extend(get_eips(ec2=ec2, region=region))
+            aws_regions = [region["RegionName"] for region in role_session.client("ec2").describe_regions()["Regions"]]
+            for region in aws_regions:
+                log("Obtaining EIPs for region: {}, account ID: {}".format(region, account_id))
+                ec2 = role_session.client("ec2", region_name=region)
+                elastic_ips.extend(get_eips(ec2=ec2, region=region))
+    else:  # collection of EIPs using profiles
+        if allregions:
+            ec2 = boto3.client("ec2")
+            aws_regions = [
+                region["RegionName"] for region in ec2.describe_regions()["Regions"]
+            ]
+        else:
+            aws_regions = regions.split(",")
+
+        for region in aws_regions:
+            for profile in profiles:
+                log("Obtaining EIPs for region: {}, profile: {}".format(region, profile))
+                profile_session = boto3.session.Session(profile_name=profile)
+                ec2 = profile_session.client("ec2", region_name=region)
+                elastic_ips.extend(get_eips(ec2=ec2, region=region))
 
     unique_ips = list(set(elastic_ips))
     log("Obtained {0} unique elastic IPs from AWS.".format(len(unique_ips)))
