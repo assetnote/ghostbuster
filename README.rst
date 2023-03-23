@@ -308,6 +308,7 @@ account that is being scanned:
                "Action": [
                    "ec2:DescribeAddresses",
                    "ec2:DescribeNetworkInterfaces",
+                   "ec2:DescribeRegions",
                    "route53:ListResourceRecordSets",
                    "route53:ListHostedZonesByName",
                    "route53:GetTrafficPolicyInstance",
@@ -378,7 +379,7 @@ lookup role:
          {
            "Effect" : "Allow",
            "Action" : "sts:AssumeRole",
-           "Resource" : ["arn:aws:iam::ORG_LOOKUP_ACCOUNT_ID:role/ta-application-security-prd-ghostbuster-org-role"]
+           "Resource" : ["arn:aws:iam::ORG_LOOKUP_ACCOUNT_ID:role/ghostbuster-org-role"]
        }]
    }
 
