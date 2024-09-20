@@ -308,8 +308,14 @@ def get_all_account_ids(organisation_lookup_role_arn):
     default="",
     required=False,
     help="Like --roles, but finds all organisation accounts automatically. The argument value should be ARN of a role "
-         "with organizations:ListAccounts and organizations:DescribeAccount. Ec2/lambda/whatever is running ghostbuster"
-         " must have permissions to assume the organisation lookup role."
+    "with organizations:ListAccounts and organizations:DescribeAccount. Ec2/lambda/whatever is running ghostbuster"
+    " must have permissions to assume the organisation lookup role.",
+)
+@click.option(
+    "--autorolestargetname",
+    default="GhostBusterTargetAccountRole",
+    required=False,
+    help="The name of the role to assume for each account in autoroles. Defaults to GhostBusterTargetAccountRole.",
 )
 @cli.command(help="Scan for dangling elastic IPs inside your AWS accounts.")
 @pass_info
@@ -325,8 +331,9 @@ def aws(
     profile: str,
     roles: str,
     autoroles: str,
-    json: bool
-    ):
+    autorolestargetname: str,
+    json: bool,
+):
     """Scan for dangling elastic IPs inside your AWS accounts."""
     # ascii art
     if not skipascii and not json:
@@ -369,7 +376,7 @@ def aws(
 
     # collection of records from r53 using roles
     for account_id in account_ids:
-        role_arn = "arn:aws:iam::{0}:role/GhostbusterTargetAccountRole".format(account_id)
+        role_arn = "arn:aws:iam::{0}:role/{1}".format(account_id, autorolestargetname)
         try:
             role_session = assume_role(role_arn)
             log("Successfully assumed role from account {0}".format(account_id))
@@ -385,7 +392,9 @@ def aws(
     elastic_ips = []
     if roles or autoroles:  # collection of EIPs using roles
         for account_id in account_ids:
-            role_arn = "arn:aws:iam::{0}:role/GhostbusterTargetAccountRole".format(account_id)
+            role_arn = "arn:aws:iam::{0}:role/{1}".format(
+                account_id, autorolestargetname
+            )
             try:
                 role_session = assume_role(role_arn)
             except ClientError as error:
