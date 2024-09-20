@@ -14,3 +14,4 @@ boto3
 cloudflare
 awsipranges
 slack_sdk
+requests
