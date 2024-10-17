@@ -226,7 +226,7 @@ role_arn = arn:aws:iam::911111111111:role/Ec2Route53Access
 source_profile = default
 ```
 
-Alternatively, instead of having roles which are assumed, you can also configure the `.aws/credentials` file to have a list of profiles and assocaited keys with scoped access.
+Alternatively, instead of having roles which are assumed, you can also configure the `.aws/credentials` file to have a list of profiles and associated keys with scoped access.
 
 Once your AWS configuration has been set with all the accounts in your AWS environment, you can then run the tool using the following command:
 
